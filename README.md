@@ -10,6 +10,6 @@ Contains all description of the processor written in Verilog.
   - _tb:_
 Contains some testbench to make sure the mini-cpu is working.
 
-  - _tools:_ 
+  - _tools:_
 Contains a Python assembler file to make possible to write programs for the mini 8-bit CPU.
 
