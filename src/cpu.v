@@ -1,38 +1,36 @@
-// CPU simple: fetch -> decode -> execute (síncron al positiu del rellotge)
+// States: FETCH -> DECODE -> EXEC -> MEM -> WB -> FETCH
+
 module cpu(
     input clk,
     input rst,
-    // per a debugging / inspecció
     output reg halted,
     output [7:0] pc_out
 );
-    // components interns
-    wire [15:0] instr_word;
+    // components
+    wire [15:0] imem_cur, imem_nextw;
     reg [7:0] pc;
     assign pc_out = pc;
 
-    imem imem0(.addr(pc), .dout(instr_word));
-
-    // fields
-    wire [3:0] opcode = instr_word[15:12];
-    wire [2:0] rd     = instr_word[11:9];
-    wire [2:0] rs1    = instr_word[8:6];
-    wire [2:0] rs2    = instr_word[5:3];
+    // two IMEM instances, one to read the actual instruction, another one to read the next one
+    imem imem0(.addr(pc), .dout(imem_cur));
+    wire [7:0] pc_plus1 = pc + 8'd1;
+    imem imem1(.addr(pc_plus1), .dout(imem_nextw));
 
     // regfile
-    reg wen;
-    reg [2:0] waddr;
-    reg [7:0] wdata;
-    wire [7:0] rdata1, rdata2;
-    regfile rf(.clk(clk), .wen(wen), .waddr(waddr), .wdata(wdata), .raddr1(rs1), .raddr2(rs2), .rdata1(rdata1), .rdata2(rdata2));
+    reg rf_wen;
+    reg [2:0] rf_waddr;
+    reg [7:0] rf_wdata;
+    reg [2:0] rf_raddr1, rf_raddr2;
+    wire [7:0] rf_rdata1, rf_rdata2;
+    regfile rf(.clk(clk), .wen(rf_wen), .waddr(rf_waddr), .wdata(rf_wdata), .raddr1(rf_raddr1), .raddr2(rf_raddr2), .rdata1(rf_rdata1), .rdata2(rf_rdata2));
 
-    // dmem
-    reg d_wen;
-    reg [7:0] d_waddr;
-    reg [7:0] d_wdata;
-    reg [7:0] d_raddr;
-    wire [7:0] d_rdata;
-    dmem dm(.clk(clk), .wen(d_wen), .waddr(d_waddr), .wdata(d_wdata), .raddr(d_raddr), .rdata(d_rdata));
+    // data memory
+    reg dm_wen;
+    reg [7:0] dm_waddr;
+    reg [7:0] dm_wdata;
+    reg [7:0] dm_raddr;
+    wire [7:0] dm_rdata;
+    dmem dm(.clk(clk), .wen(dm_wen), .waddr(dm_waddr), .wdata(dm_wdata), .raddr(dm_raddr), .rdata(dm_rdata));
 
     // ALU
     reg [2:0] alu_op;
@@ -41,92 +39,150 @@ module cpu(
     wire alu_zero;
     alu ualu(.op(alu_op), .a(alu_a), .b(alu_b), .y(alu_y), .zero(alu_zero));
 
-    // temporary storage
-    reg [15:0] next_word;
+    // microcontrol
+    reg [2:0] state;
+    localparam S_FETCH  = 3'd0;
+    localparam S_DECODE = 3'd1;
+    localparam S_EXEC   = 3'd2; // ALU ops
+    localparam S_MEM    = 3'd3; // memory access (LD/ST)
+    localparam S_WB     = 3'd4; // writeback to regfile
+    localparam S_HALT   = 3'd5;
 
-    // reset
+    // registers for the instruction camps
+    reg [3:0] opcode_reg;
+    reg [2:0] rd_reg, rs1_reg, rs2_reg;
+    reg [7:0] imm_reg; // immediat (baixa part de la segona paraula)
+
+    // Reset & FSM
     always @(posedge clk) begin
+        // as default we clean the control signal
+        rf_wen <= 1'b0;
+        dm_wen <= 1'b0;
+
         if (rst) begin
             pc <= 8'b0;
+            state <= S_FETCH;
             halted <= 1'b0;
-            wen <= 1'b0;
-            d_wen <= 1'b0;
-        end else if (!halted) begin
-            // default control signals
-            wen <= 1'b0;
-            d_wen <= 1'b0;
-            d_raddr <= 8'b0;
+            // clean control registers
+            rf_waddr <= 3'b0;
+            rf_wdata <= 8'b0;
+            dm_waddr <= 8'b0;
+            dm_wdata <= 8'b0;
+            dm_raddr <= 8'b0;
+            rf_raddr1 <= 3'b0;
+            rf_raddr2 <= 3'b0;
+        end else begin
+            case (state)
+                S_FETCH: begin
+                    // Imem_cur contains the 16 bit word
+                    // We move to DECODE and prepare imem + 1 in the case we have to read an inmediate
+                    state <= S_DECODE;
+                end
 
-            case (opcode)
-                4'h0: begin // NOP
-                    pc <= pc + 1;
+                S_DECODE: begin
+                    // Capture instruction camps (combinationals saved in regs)
+                    opcode_reg <= imem_cur[15:12];
+                    rd_reg <= imem_cur[11:9];
+                    rs1_reg <= imem_cur[8:6];
+                    rs2_reg <= imem_cur[5:3];
+                    // next word (inmediat) is imem_nextw[7:0]
+                    imm_reg <= imem_nextw[7:0];
+
+                    // Configure read ports of regfile for posible usage
+                    rf_raddr1 <= imem_cur[8:6];
+                    rf_raddr2 <= imem_cur[5:3];
+
+                    // Decide next state depending on the opcode
+                    case (imem_cur[15:12])
+                        4'h0: begin // NOP
+                            pc <= pc + 8'd1;
+                            state <= S_FETCH;
+                        end
+                        4'h1, 4'h2, 4'h3, 4'h4: begin // R-type: ADD,SUB,AND,OR
+                            // prepare ALU and go to EXEC
+                            alu_a <= rf_rdata1;
+                            alu_b <= rf_rdata2;
+                            case (imem_cur[15:12])
+                                4'h1: alu_op <= 3'b000; // ADD
+                                4'h2: alu_op <= 3'b001; // SUB
+                                4'h3: alu_op <= 3'b010; // AND
+                                4'h4: alu_op <= 3'b011; // OR
+                                default: alu_op <= 3'b000;
+                            endcase
+                            state <= S_EXEC;
+                        end
+                        4'h5: begin // LDI rd, imm8 (inmediat to next word)
+                            // write inmediate at register directy in this step (síncron at clk)
+                            rf_wen <= 1'b1;
+                            rf_waddr <= imem_cur[11:9];
+                            rf_wdata <= imem_nextw[7:0];
+                            // We go up to two PC words (instrucció + immediat)
+                            pc <= pc + 8'd2;
+                            state <= S_FETCH;
+                        end
+                        4'h6: begin // LD rd, addr8
+                            // cofigure the read from memory, we move to MEM state
+                            dm_raddr <= imem_nextw[7:0];
+                            // safe rd_reg (ja capturat en rd_reg)
+                            pc <= pc + 8'd2; // jump instrucció + immediat
+                            state <= S_MEM;
+                        end
+                        4'h7: begin // ST rs1, addr8
+                            // write at memory the data of the register rs1 (rf_rdata1)
+                            dm_wen <= 1'b1;
+                            dm_waddr <= imem_nextw[7:0];
+                            dm_wdata <= rf_rdata1;
+                            pc <= pc + 8'd2;
+                            state <= S_FETCH; // the write is made of the same clock flanc
+                        end
+                        4'h8: begin // JMP addr8
+                            pc <= imem_nextw[7:0];
+                            state <= S_FETCH;
+                        end
+                        4'hF: begin // HALT
+                            halted <= 1'b1;
+                            state <= S_HALT;
+                        end
+                        default: begin
+                            // non-known instruction -> NOP behaviour
+                            pc <= pc + 8'd1;
+                            state <= S_FETCH;
+                        end
+                    endcase
                 end
-                4'h1: begin // ADD rd, rs1, rs2
-                    alu_op <= 3'b000;
-                    alu_a <= rdata1;
-                    alu_b <= rdata2;
-                    // write result to rd
-                    waddr <= rd;
-                    wdata <= alu_y;
-                    wen <= 1'b1;
-                    pc <= pc + 1;
+
+                S_EXEC: begin
+                    // alu_y is the combinational result of the ALU
+                    // we do writeback on the next flanc (síncron)
+                    rf_wen <= 1'b1;
+                    rf_waddr <= rd_reg;
+                    rf_wdata <= alu_y;
+                    pc <= pc + 8'd1;
+                    state <= S_FETCH;
                 end
-                4'h2: begin // SUB
-                    alu_op <= 3'b001;
-                    alu_a <= rdata1;
-                    alu_b <= rdata2;
-                    waddr <= rd;
-                    wdata <= alu_y;
-                    wen <= 1'b1;
-                    pc <= pc + 1;
+
+                S_MEM: begin
+                    // We are here for a memory read (LD). dmem provides rdata on the next edge.
+                    // On this edge we activate the read request (we already set dm_raddr to DECODE)
+                    // Now we go to WB to write the read value to the register
+                    state <= S_WB;
                 end
-                4'h3: begin // AND
-                    alu_op <= 3'b010;
-                    alu_a <= rdata1;
-                    alu_b <= rdata2;
-                    waddr <= rd;
-                    wdata <= alu_y;
-                    wen <= 1'b1;
-                    pc <= pc + 1;
+
+                S_WB: begin
+                    // We write the read data of DMEM to destination register (rd_reg)
+                    rf_wen <= 1'b1;
+                    rf_waddr <= rd_reg;
+                    rf_wdata <= dm_rdata;
+                    state <= S_FETCH;
                 end
-                4'h4: begin // OR
-                    alu_op <= 3'b011;
-                    alu_a <= rdata1;
-                    alu_b <= rdata2;
-                    waddr <= rd;
-                    wdata <= alu_y;
-                    wen <= 1'b1;
-                    pc <= pc + 1;
+
+                S_HALT: begin
+                    // We stop here (infinite time, or until we stop the program)
+                    state <= S_HALT;
                 end
-                4'h5: begin // LDI rd, imm8 (next word)
-                    next_word <= instr_word; // not strictly necessari, però fem servir pc+1
-                    // llegir immediat de la següent paraula
-                    // assumim que la imem és accessible combinacionalment
-                    // i llegim la paraula següent
-                    // per fer-ho senzill, fem una assignació combinacional amb instància imem extra
-                    // però aquí simplifiquem: fem una lectura a nivell behavioural amb un wire
-                    // implementació: recuperar la paraula següent prenent imem[pc+1]
-                    // Per simplicitat: utilitzem una instància combinacional addicional
-                    pc <= pc + 2; // saltem la paraula immediate
-                    // La lectura real i l'escriptura al registre es fa usant una altra instància de imem en combinacional.
-                    // Per simplicitat al model, farem la lectura de la imem de la següent paraula amb una instància interna: veure la instància imem_s.
-                end
-                4'h6: begin // LD rd, addr8 (next word -> addr)
-                    pc <= pc + 2;
-                end
-                4'h7: begin // ST rd, addr8
-                    pc <= pc + 2;
-                end
-                4'h8: begin // JMP addr8
-                    // llegim la següent paraula, posem PC = addr
-                    // per senzillesa, assumem que la imem retornarà la paraula immediata en combinacional
-                    pc <= pc + 1; // placeholder (la implementació més avall al testbench utilitza un CPU simplificat)
-                end
-                4'hF: begin // HALT
-                    halted <= 1'b1;
-                end
+
                 default: begin
-                    pc <= pc + 1;
+                    state <= S_FETCH;
                 end
             endcase
         end
