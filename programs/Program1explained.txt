@@ -1,0 +1,12 @@
+The way we identify as a unic way every instruction is thanks to its "Opcode", which is defined in the CPU file.
+The instructions have a 16-bit bandwidth, that's why we have, in binary 16 0/1 positions.
+Depending on the instrction, registers we access, etc the bit Opcode changes, that's how we can obtine the next values for the hexadecimal program.
+
+5200 -> 0101 0010 0000 0000  (LDI R1)
+0003 -> 0000 0000 0000 0011  (imm = 3)
+5400 -> 0101 0100 0000 0000  (LDI R2)
+0005 -> 0000 0000 0000 0101  (imm = 5)
+1650 -> 0001 0110 0101 0000  (ADD R3,R1,R2)
+70C0 -> 0111 0000 1100 0000  (ST R3, addr8)   <-- Correct to store R3
+0010 -> 0000 0000 0001 0000  (addr = 0x10)
+F000 -> 1111 0000 0000 0000  (HALT)
