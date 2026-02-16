@@ -29,6 +29,7 @@ LDI rd, imm8
 LD  rd, addr8
 ST  rs, addr8
 JMP addr8
+JNZ rs, addr8
 HALT
 
 Labels: label:  (a label occupies the current word address; for I-type instructions the address increases accordingly)
@@ -101,7 +102,7 @@ def assemble_lines(lines: List[str]) -> List[int]:
             labels[lbl] = pc
         else:
             mnemonic = parts[0].upper()
-            if mnemonic in ('LDI','LD','ST','JMP'):
+            if mnemonic in ('LDI','LD','ST','JMP','JNZ'):
                 pc += 2
             else:
                 pc += 1
@@ -263,4 +264,5 @@ if __name__ == '__main__':
         print("Usage: assemble.py input.asm output.hex")
         sys.exit(1)
     assemble_file(sys.argv[1], sys.argv[2])
+
 
