@@ -26,4 +26,5 @@
     - 0x6: LD Rdest, addr8 (instruction + word addr8)
     - 0x7: ST Rsrc, addr8 (instruction + word addr8)
     - 0x8: JMP addr8 (instrucció + paraula addr8)
+    - 0x9: JNZ Rsrc, addr8 (comparasion from a register to 0, if not zero, jump to address)
     - 0xF: HALT
