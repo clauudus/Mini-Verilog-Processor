@@ -15,7 +15,9 @@ module alu(
 			3'b001: y = a - b; // SUB
 			3'b010: y = a & b; // AND
 			3'b011: y = a | b; // OR
+			3'b100: y = a != 0; //JNZ = Jump Not Zero
 			default: y = 8'b0;
 		endcase
 	end
 endmodule
+
