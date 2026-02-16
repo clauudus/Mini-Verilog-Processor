@@ -4,7 +4,7 @@ module tb;
     wire halted;
     wire [7:0] pc;
 
-    // instanciació del CPU
+    // instantation of CPU
     cpu uut(.clk(clk), .rst(rst), .halted(halted), .pc_out(pc));
 
     // toggling clock
@@ -13,9 +13,10 @@ module tb;
     initial begin
         $dumpfile("cpu.vcd");
         $dumpvars(0, tb);
-        #12 rst = 0; // treiem reset
-        // Fem simulació durant un nombre limitat de cicles
+        #12 rst = 0; // take out reset
+        // Simulation during a limited time
         #1000;
         $finish;
     end
 endmodule
+
