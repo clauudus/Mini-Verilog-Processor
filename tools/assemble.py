@@ -264,6 +264,3 @@ if __name__ == '__main__':
         print("Usage: assemble.py input.asm output.hex")
         sys.exit(1)
     assemble_file(sys.argv[1], sys.argv[2])
-
-
-
