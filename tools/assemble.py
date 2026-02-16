@@ -218,7 +218,7 @@ def assemble_lines(lines: List[str]) -> List[int]:
             elif mnemonic == 'JNZ':
               if len(parts) != 3:
                 raise SyntaxError(f"Line {lineno}: JNZ requires 2 operands (reg, addr)")
-                  m = REG_RE.match(parts[1])
+                m = REG_RE.match(parts[1])
                 if not m:
                     raise SyntaxError(f"Line {lineno}: invalid register '{parts[1]}'")
                 reg = int(m.group(1))
@@ -264,5 +264,6 @@ if __name__ == '__main__':
         print("Usage: assemble.py input.asm output.hex")
         sys.exit(1)
     assemble_file(sys.argv[1], sys.argv[2])
+
 
 
