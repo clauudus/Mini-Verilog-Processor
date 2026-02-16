@@ -143,7 +143,6 @@ module cpu(
                         4'h9: begin // JNZ Rn, addr8
                             // we test rd_reg (bits 11:9)
                             rf_raddr1 <= rd_reg;
-                
                             if (rf_rdata1 != 8'b0)
                                 pc <= imm_reg;      // jump
                             else
