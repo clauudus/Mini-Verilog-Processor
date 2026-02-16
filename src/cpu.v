@@ -80,26 +80,26 @@ module cpu(
                 end
 
                 S_DECODE: begin
-                    // Capture instruction camps (combinationals saved in regs)
+                    // Capture instruction fields
                     opcode_reg <= imem_cur[15:12];
-                    rd_reg <= imem_cur[11:9];
+                    rd_reg  <= imem_cur[11:9];
                     rs1_reg <= imem_cur[8:6];
                     rs2_reg <= imem_cur[5:3];
-                    // next word (inmediat) is imem_nextw[7:0]
+                
                     imm_reg <= imem_nextw[7:0];
-
-                    // Configure read ports of regfile for posible usage
+                
+                    // Configure read ports
                     rf_raddr1 <= imem_cur[8:6];
                     rf_raddr2 <= imem_cur[5:3];
-
-                    // Decide next state depending on the opcode
+                
                     case (imem_cur[15:12])
+                
                         4'h0: begin // NOP
                             pc <= pc + 8'd1;
                             state <= S_FETCH;
                         end
-                        4'h1, 4'h2, 4'h3, 4'h4: begin // R-type: ADD,SUB,AND,OR
-                            // prepare ALU and go to EXEC
+                
+                        4'h1, 4'h2, 4'h3, 4'h4: begin // R-type
                             alu_a <= rf_rdata1;
                             alu_b <= rf_rdata2;
                             case (imem_cur[15:12])
@@ -111,45 +111,59 @@ module cpu(
                             endcase
                             state <= S_EXEC;
                         end
-                        4'h5: begin // LDI rd, imm8 (inmediat to next word)
-                            // write inmediate at register directy in this step (síncron at clk)
-                            rf_wen <= 1'b1;
-                            rf_waddr <= imem_cur[11:9];
-                            rf_wdata <= imem_nextw[7:0];
-                            // We go up to two PC words (instrucció + immediat)
+                
+                        4'h5: begin // LDI
+                            rf_wen   <= 1'b1;
+                            rf_waddr <= rd_reg;
+                            rf_wdata <= imm_reg;
                             pc <= pc + 8'd2;
                             state <= S_FETCH;
                         end
-                        4'h6: begin // LD rd, addr8
-                            // cofigure the read from memory, we move to MEM state
-                            dm_raddr <= imem_nextw[7:0];
-                            // safe rd_reg (ja capturat en rd_reg)
-                            pc <= pc + 8'd2; // jump instrucció + immediat
+                
+                        4'h6: begin // LD
+                            dm_raddr <= imm_reg;
+                            pc <= pc + 8'd2;
                             state <= S_MEM;
                         end
-                        4'h7: begin // ST rs1, addr8
-                            // write at memory the data of the register rs1 (rf_rdata1)
-                            dm_wen <= 1'b1;
-                            dm_waddr <= imem_nextw[7:0];
+                
+                        4'h7: begin // ST
+                            dm_wen   <= 1'b1;
+                            dm_waddr <= imm_reg;
                             dm_wdata <= rf_rdata1;
                             pc <= pc + 8'd2;
-                            state <= S_FETCH; // the write is made of the same clock flanc
-                        end
-                        4'h8: begin // JMP addr8
-                            pc <= imem_nextw[7:0];
                             state <= S_FETCH;
                         end
+                
+                        4'h8: begin // JMP
+                            pc <= imm_reg;
+                            state <= S_FETCH;
+                        end
+                
+                        //NEW INSTRUCTION
+                        4'h9: begin // JNZ Rn, addr8
+                            // we test rd_reg (bits 11:9)
+                            rf_raddr1 <= rd_reg;
+                
+                            if (rf_rdata1 != 8'b0)
+                                pc <= imm_reg;      // jump
+                            else
+                                pc <= pc + 8'd2;    // continue
+                
+                            state <= S_FETCH;
+                        end
+                
                         4'hF: begin // HALT
                             halted <= 1'b1;
                             state <= S_HALT;
                         end
+                
                         default: begin
-                            // non-known instruction -> NOP behaviour
                             pc <= pc + 8'd1;
                             state <= S_FETCH;
                         end
                     endcase
                 end
+
 
                 S_EXEC: begin
                     // alu_y is the combinational result of the ALU
