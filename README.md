@@ -15,3 +15,7 @@ Contains a Python assembler file to make possible to write programs for the mini
 
   - _programs_ <br/>
 Contains programs that can be run with the processor
+
+## Important Notes:
+The current version of the processor is not working properly since I'm adding a new instruction (Jump if Not Zero). The main goal to implement this instruction is to be able to make problems with very simple loops such as a for or a while.
+The CPU file doesn't work as well as the assembler.
