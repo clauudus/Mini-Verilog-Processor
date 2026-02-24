@@ -216,23 +216,26 @@ def assemble_lines(lines: List[str]) -> List[int]:
                 pc += 2
 
             elif mnemonic == 'JNZ':
-              if len(parts) != 3:
-                raise SyntaxError(f"Line {lineno}: JNZ requires 2 operands (reg, addr)")
+                if len(parts) != 3:
+                  raise SyntaxError(f"Line {lineno}: JNZ requires 2 operands (reg, addr)")
                 m = REG_RE.match(parts[1])
                 if not m:
                     raise SyntaxError(f"Line {lineno}: invalid register '{parts[1]}'")
                 reg = int(m.group(1))
-                # emit instruction word: opcode + reg in rd field
-                instr = (OPCODES['JNZ'] << 12) | (reg << 9)
-                out_words.append(instr & 0xFFFF)
-                # resolve address (label or numeric) -> one byte
+              
                 addr_tok = parts[2]
                 if addr_tok in labels:
                     addr = labels[addr_tok]
                 else:
                     addr = parse_number(addr_tok, lineno)
-                out_words.append(addr & 0xFF)
-                pc += 2  # note: we've emitted two words? depends on your "words" convention
+                                addr8 = addr & 0xFF
+                if addr != addr8:
+                    print(f"Warning: line {lineno}: jump address {addr} truncated to 8 bits -> {addr8}")
+
+                instr = (OPCODES['JNZ'] << 12) | (reg << 9)
+                out_words.append(instr)
+                out_words.append(addr8)
+                pc += 2
 
             elif mnemonic == 'HALT':
                 instr = (OPCODES['HALT'] << 12)
